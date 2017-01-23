@@ -1,0 +1,15 @@
+{
+    "configurations": [
+        {
+            "name": "Windows x64",
+            "includePath": [
+                "include",
+                "C:\\Program Files (x86)\\Microsoft Visual Studio\\2017\\Community\\VC\\Tools\\MSVC\\14.10.24728\\include"
+            ],
+            "defines": [ "_DEBUG" ],
+            "compilerSwitches": "/std:c++11",
+            "intelliSenseMode": "msvc-x64",
+            "undefines": []
+        }
+    ]
+}
