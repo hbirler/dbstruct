@@ -10,8 +10,8 @@
 
 using namespace std;
 
-const int IL = 20;
-const int LL = 20;
+const int IL = 25;
+const int LL = IL;
 const int IH = 2 * IL + 1;	//inner high
 const int LH = 2 * LL + 1;	//leaf high
 
@@ -25,6 +25,7 @@ class btree
 	void insert(const K&, const V&);
 	void erase(const K&);
 	V* find(const K&);
+	bool contains(const K&);
 	vector<V> find_range(const K& low, const K& high);
 	int size();
 	string to_string();
@@ -35,6 +36,8 @@ class btree
 	class node
 	{
 		friend class btree<K, V, Lt>;
+	protected:
+		int size;
 	public:
 		virtual bool is_leaf() = 0;
 		virtual bool is_full() = 0;
@@ -42,6 +45,8 @@ class btree
 		virtual split_info split() = 0;
 		virtual redis_info redis(const K&, node*) = 0;
 		virtual string to_string(int depth = 0) = 0;
+		//inline bool is_full() { return size == IH; }
+		//inline bool is_empty() { return size == IL; }
 	};
 
 	struct split_info
@@ -67,17 +72,10 @@ class btree
 		K keys[IH];
 		node* ptrs[IH + 1];
 
-		inner() : size(0) {}
+		inner() { size = 0; }
 		bool is_leaf() { return false; }
-		bool is_full() 
-		{
-			return size == IH;
-		}
-		bool is_empty() 
-		{ 
-			return size == IL; 
-		}
-		int size;
+		inline bool is_full() { return size == IH; }
+		inline bool is_empty() { return size == IL; }
 		void insert(int pos, const K&, node* left, node* right);
 		int get_pos(const K&);
 		split_info split() override;
@@ -93,17 +91,19 @@ class btree
 		V values[LH];
 		leaf* next = NULL;
 
-		leaf() :next(NULL), size(0) {}
+		leaf() :next(NULL) { size = 0; }
 		bool is_leaf() { return true; }
-		bool is_full() { return size == LH; }
-		bool is_empty() { return size == LL; }
-		int size;
+		inline bool is_full() { return size == LH; }
+		inline bool is_empty() { return size == LL; }
 		void insert(const K&, const V&);
+		void insert(int, const K&, const V&);
 		V* get(const K&);
+		V* get(int, const K&);
 		int get_pos(const K&);
 		split_info split() override;
 		redis_info redis(const K&, node*) override;
 		void erase(const K&);
+		void erase(int, const K&);
 		string to_string(int depth = 0) override;
 	};
 
@@ -116,14 +116,13 @@ class btree
 template<class K, class V, class Lt>
 btree<K, V, Lt>::btree()
 {
-	cout<<"Testing BTree"<<endl;
 	this->psize = 0;
 	this->root = NULL;
 }
 
 
 template <class K, class V, class Lt>
-V* btree<K,V,Lt>::find(const K& key)
+inline V* btree<K,V,Lt>::find(const K& key)
 {
 	if (!root)
 		return NULL;
@@ -138,6 +137,12 @@ V* btree<K,V,Lt>::find(const K& key)
 		cur = next;
 	}
 	return ((leaf*)cur)->get(key);
+}
+
+template <class K, class V, class Lt>
+inline bool btree<K, V, Lt>::contains(const K& key)
+{
+	return !find(key);
 }
 
 template <class K, class V, class Lt>
@@ -187,21 +192,20 @@ int btree<K, V, Lt>::size()
 }
 
 template<class K, class V, class Lt>
-inline string btree<K, V, Lt>::to_string()
+string btree<K, V, Lt>::to_string()
 {
 	return root->to_string();
 }
 
-
 template <class K, class V, class Lt>
 void btree<K,V,Lt>::insert(const K& key, const V& value)
 {
-	V* found = find(key);
+	/*V* found = find(key);
 	if (found)
 	{
 		*found = value;
 		return;
-	}
+	}*/
 
 	if (!root)
 	{
@@ -249,18 +253,22 @@ void btree<K,V,Lt>::insert(const K& key, const V& value)
 			cur = next;
 		}
 	}
-	
-	((leaf*)cur)->insert(key, value);
+	int pos = ((leaf*)cur)->get_pos(key) - 1;
+	V* mv = ((leaf*)cur)->get(pos, key);
+	if (mv == NULL)
+		((leaf*)cur)->insert(pos + 1, key, value);
+	else
+		*mv = value;
 
 	this->psize += 1;
 }
 
 template<class K, class V, class Lt>
-inline void btree<K, V, Lt>::erase(const K& key)
+void btree<K, V, Lt>::erase(const K& key)
 {
-	V* found = find(key);
+	/*V* found = find(key);
 	if (!found)
-		return;
+		return;*/
 
 	if (!root)
 		return;
@@ -308,11 +316,13 @@ inline void btree<K, V, Lt>::erase(const K& key)
 			cur = next;
 		}
 	}
-
-	((leaf*)cur)->erase(key);
+	int pos = ((leaf*)cur)->get_pos(key) - 1;
+	if (((leaf*)cur)->get(pos, key))
+		((leaf*)cur)->erase(pos, key);
 
 	this->psize -= 1;
 }
+
 
 template <class K, class V, class Lt>
 void btree<K, V, Lt>::inner::insert(int pos, const K& key, node * left, node * right)
@@ -432,6 +442,7 @@ string btree<K, V, Lt>::inner::to_string(int depth)
 	return retval.str();
 }
 
+
 template <class K, class V, class Lt>
 inline int btree<K, V, Lt>::leaf::get_pos(const K& key)
 {
@@ -439,9 +450,14 @@ inline int btree<K, V, Lt>::leaf::get_pos(const K& key)
 }
 
 template <class K, class V, class Lt>
-void btree<K, V, Lt>::leaf::insert(const K& key, const V& value)
+inline void btree<K, V, Lt>::leaf::insert(const K& key, const V& value)
 {
-	int pos = this->get_pos(key);
+	insert(this->get_pos(key), key, value);
+}
+
+template <class K, class V, class Lt>
+void btree<K, V, Lt>::leaf::insert(int pos, const K& key, const V& value)
+{
 	for (int i = this->size; i > pos; i--)
 	{
 		this->keys[i] = this->keys[i - 1];
@@ -456,9 +472,14 @@ void btree<K, V, Lt>::leaf::insert(const K& key, const V& value)
 }
 
 template<class K, class V, class Lt>
-V* btree<K, V, Lt>::leaf::get(const K& key)
+inline V* btree<K, V, Lt>::leaf::get(const K& key)
 {
-	int pos = this->get_pos(key) - 1;
+	return get(this->get_pos(key) - 1, key);
+}
+
+template<class K, class V, class Lt>
+V* btree<K, V, Lt>::leaf::get(int pos, const K& key)
+{
 	if (pos >= size)
 		return NULL;
 	if (Lt()(this->keys[pos], key) || Lt()(key, this->keys[pos]))
@@ -529,9 +550,14 @@ typename btree<K, V, Lt>::redis_info btree<K, V, Lt>::leaf::redis(const K&, node
 }
 
 template<class K, class V, class Lt>
-void btree<K, V, Lt>::leaf::erase(const K& key)
+inline void btree<K, V, Lt>::leaf::erase(const K& key)
 {
-	int pos = get_pos(key) - 1;
+	erase(get_pos(key) - 1);
+}
+
+template<class K, class V, class Lt>
+void btree<K, V, Lt>::leaf::erase(int pos, const K& key)
+{
 	for (int i = pos; i < size; i++)
 	{
 		keys[i] = keys[i + 1];

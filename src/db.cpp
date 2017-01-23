@@ -2,6 +2,16 @@
 
 using namespace std;
 
+
+int64_t getval(btree<int, int64_t>& mytree, int key)
+{
+	auto v = mytree.find(key);
+	if (v == 0)
+		return -1;
+	else
+		return *v;
+}
+
 void benchmark()
 {
 	btree<int, int64_t> mytree;
@@ -11,16 +21,22 @@ void benchmark()
 	int testmax = 1000000;
 	int testr = 5;
 
+	std::default_random_engine generator;
+	std::uniform_int_distribution<int> distribution(1, testmax);
+
 	for (int i = 2; i < testmax; i++)
 	{
-		mytree.insert(i, (int64_t)i*i);
+		int num = distribution(generator);
+		//int num = i;
+		//cout << num << endl;
+		mytree.insert(num, (int64_t)num*num);
 	}
 
 	for (int i = 1; i < testr; i++)
-		cout << *mytree.find(i) << " ";
+		cout << getval(mytree, i) << " ";
 	cout << endl;
 	for (int i = testmax - testr; i < testmax; i++)
-		cout << *mytree.find(i) << " ";
+		cout << getval(mytree, i) << " ";
 	cout << endl;
 
 	for (int i = testr; i < testmax - testr; i++)
@@ -35,7 +51,6 @@ void benchmark()
 
 int main_test()
 {
-
 	cout << "Testing" << endl;
 
 	typedef std::chrono::high_resolution_clock Time;
@@ -50,7 +65,7 @@ int main_test()
 	ms d = std::chrono::duration_cast<ms>(fs);
 	std::cout << fs.count() << "s\n";
 	std::cout << d.count() << "ms\n";
-	system("pause");
+	//system("pause");
 
 	
 	return 0;
