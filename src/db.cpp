@@ -2,33 +2,57 @@
 
 using namespace std;
 
-
-int main_test()
+void benchmark()
 {
-	cout << "Testing" << endl;
 	btree<int, int64_t> mytree;
 	mytree.insert(1, 1);
 	mytree.insert(1, 3);
 
-	int testmax = 100;
+	int testmax = 1000000;
+	int testr = 5;
 
 	for (int i = 2; i < testmax; i++)
 	{
 		mytree.insert(i, (int64_t)i*i);
-		//cout << mytree.to_string() << endl;
 	}
-	for (int i = 1; i < 20; i++)
+
+	for (int i = 1; i < testr; i++)
 		cout << *mytree.find(i) << " ";
 	cout << endl;
-	for (int i = testmax - 20; i < testmax; i++)
+	for (int i = testmax - testr; i < testmax; i++)
 		cout << *mytree.find(i) << " ";
 	cout << endl;
-	for (auto& val : mytree.find_range(3, 9))
+
+	for (int i = testr; i < testmax - testr; i++)
+	{
+		mytree.erase(i);
+	}
+
+	for (auto& val : mytree.find_range(1, testmax))
 		cout << val << " ";
 	cout << endl;
+}
 
+int main_test()
+{
 
+	cout << "Testing" << endl;
+
+	typedef std::chrono::high_resolution_clock Time;
+	typedef std::chrono::milliseconds ms;
+	typedef std::chrono::duration<float> fsec;
+	auto t0 = Time::now();
+
+	benchmark();
+
+	auto t1 = Time::now();
+	fsec fs = t1 - t0;
+	ms d = std::chrono::duration_cast<ms>(fs);
+	std::cout << fs.count() << "s\n";
+	std::cout << d.count() << "ms\n";
 	system("pause");
+
+	
 	return 0;
 }
 

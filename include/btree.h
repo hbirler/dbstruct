@@ -10,8 +10,11 @@
 
 using namespace std;
 
-const int IC = 2;
-const int LC = 2;
+const int IL = 20;
+const int LL = 20;
+const int IH = 2 * IL + 1;	//inner high
+const int LH = 2 * LL + 1;	//leaf high
+
 
 template <class K, class V, class Lt = less<K>>
 class btree
@@ -27,14 +30,17 @@ class btree
 	string to_string();
 	
 	struct split_info;
+	struct redis_info;
 
 	class node
 	{
 		friend class btree<K, V, Lt>;
-
+	public:
 		virtual bool is_leaf() = 0;
 		virtual bool is_full() = 0;
+		virtual bool is_empty() = 0;
 		virtual split_info split() = 0;
+		virtual redis_info redis(const K&, node*) = 0;
 		virtual string to_string(int depth = 0) = 0;
 	};
 
@@ -46,41 +52,62 @@ class btree
 		node* left;
 		node* right;
 	};
+	struct redis_info
+	{
+		redis_info();
+		bool merged;
+		K newkey;
+		node* newnode;
+	};
 
 	class inner : public node
 	{
 		friend class btree<K, V, Lt>;
+	public:
+		K keys[IH];
+		node* ptrs[IH + 1];
 
-		K keys[IC];
-		node* ptrs[IC + 1];
-
+		inner() : size(0) {}
 		bool is_leaf() { return false; }
-		bool is_full() { return size == IC; }
+		bool is_full() 
+		{
+			return size == IH;
+		}
+		bool is_empty() 
+		{ 
+			return size == IL; 
+		}
 		int size;
 		void insert(int pos, const K&, node* left, node* right);
 		int get_pos(const K&);
 		split_info split() override;
+		redis_info redis(const K&, node*) override;
+		void erase(int, node*);
 		string to_string(int depth = 0) override;
 	};
 	class leaf : public node
 	{
 		friend class btree<K, V, Lt>;
-
-		K keys[LC];
-		V values[LC];
+	public:
+		K keys[LH];
+		V values[LH];
 		leaf* next = NULL;
 
+		leaf() :next(NULL), size(0) {}
 		bool is_leaf() { return true; }
-		bool is_full() { return size == LC; }
+		bool is_full() { return size == LH; }
+		bool is_empty() { return size == LL; }
 		int size;
 		void insert(const K&, const V&);
 		V* get(const K&);
 		int get_pos(const K&);
 		split_info split() override;
+		redis_info redis(const K&, node*) override;
+		void erase(const K&);
 		string to_string(int depth = 0) override;
 	};
 
-	inner* root;
+	node* root;
 	
 	//class iterator;
 };
@@ -135,18 +162,18 @@ vector<V> btree<K, V, Lt>::find_range(const K& low, const K& high)
 		pos++;
 	for (int i = pos; i < cl->size; i++)
 	{
-		if (Lt()(high, cl->keys[pos]))
+		if (Lt()(high, cl->keys[i]))
 			return retval;
-		retval.push_back(cl->values[pos]);
+		retval.push_back(cl->values[i]);
 	}
 	cl = cl->next;
 	while (cl != NULL)
 	{
 		for (int i = 0; i < cl->size; i++)
 		{
-			if (Lt()(high, cl->keys[pos]))
+			if (Lt()(high, cl->keys[i]))
 				return retval;
-			retval.push_back(cl->values[pos]);
+			retval.push_back(cl->values[i]);
 		}
 		cl = cl->next;
 	}
@@ -178,14 +205,8 @@ void btree<K,V,Lt>::insert(const K& key, const V& value)
 
 	if (!root)
 	{
-		root = new inner();
-		root->keys[0] = key;
-		root->ptrs[0] = new leaf();
-		root->ptrs[1] = new leaf();
-		root->size = 1;
-		leaf* myleaf = (leaf*)root->ptrs[1];
-		((leaf*)root->ptrs[0])->next = myleaf;
-		myleaf->insert(key, value);
+		root = new leaf();
+		((leaf*)root)->insert(key, value);
 		
 		return;
 	}
@@ -196,10 +217,11 @@ void btree<K,V,Lt>::insert(const K& key, const V& value)
 	{
 		split_info sp = root->split();
 		root = new inner();
-		root->keys[0] = sp.key;
-		root->ptrs[0] = sp.left;
-		root->ptrs[1] = sp.right;
-		root->size = 1;
+		inner* ir = (inner*)root;
+		ir->keys[0] = sp.key;
+		ir->ptrs[0] = sp.left;
+		ir->ptrs[1] = sp.right;
+		ir->size = 1;
 		if (Lt()(key, sp.key))
 			cur = sp.left;
 		else
@@ -233,7 +255,7 @@ void btree<K,V,Lt>::insert(const K& key, const V& value)
 	this->psize += 1;
 }
 
-/*template<class K, class V, class Lt>
+template<class K, class V, class Lt>
 inline void btree<K, V, Lt>::erase(const K& key)
 {
 	V* found = find(key);
@@ -253,15 +275,31 @@ inline void btree<K, V, Lt>::erase(const K& key)
 
 		if (next->is_empty())
 		{
-			redis_info rp = next->redis(me->ptrs[npos + 1]);	//or npos-1
-			
-			if (rp.merged)
+			int m1pos = 0;
+			node* m1, *m2;
+			if (npos == me->size)
 			{
-				//erase nposkey from me
+				m1pos = npos - 1;
+				m1 = me->ptrs[m1pos];
+				m2 = me->ptrs[m1pos + 1];
 			}
 			else
 			{
-				//change key in me to rp.newkey
+				m1pos = npos;
+				m1 = me->ptrs[m1pos];
+				m2 = me->ptrs[m1pos + 1];
+			}
+			redis_info rp = m1->redis(me->keys[m1pos], m2);
+			
+			if (rp.merged)
+			{
+				me->erase(m1pos, rp.newnode);
+				if (cur == root && me->size == 0)
+					root = rp.newnode;
+			}
+			else
+			{
+				me->keys[m1pos] = rp.newkey;
 			}
 			//cur = something
 		}
@@ -271,10 +309,10 @@ inline void btree<K, V, Lt>::erase(const K& key)
 		}
 	}
 
-	((leaf*)cur)->erase(key, value);
+	((leaf*)cur)->erase(key);
 
 	this->psize -= 1;
-}*/
+}
 
 template <class K, class V, class Lt>
 void btree<K, V, Lt>::inner::insert(int pos, const K& key, node * left, node * right)
@@ -294,7 +332,7 @@ void btree<K, V, Lt>::inner::insert(int pos, const K& key, node * left, node * r
 }
 
 template <class K, class V, class Lt>
-int btree<K, V, Lt>::inner::get_pos(const K& key)
+inline int btree<K, V, Lt>::inner::get_pos(const K& key)
 {
 	return upper_bound(this->keys, this->keys + this->size, key, Lt()) - this->keys;
 }
@@ -323,7 +361,64 @@ typename btree<K, V, Lt>::split_info btree<K, V, Lt>::inner::split()
 }
 
 template<class K, class V, class Lt>
-inline string btree<K, V, Lt>::inner::to_string(int depth)
+typename btree<K, V, Lt>::redis_info btree<K, V, Lt>::inner::redis(const K& key, node* nextin)
+{
+	inner* next = (inner*)nextin;
+	redis_info retval;
+	if (next->is_empty())
+	{
+		retval.merged = true;
+		keys[size] = key;
+		size += 1;
+		for (int i = 0; i < next->size; i++)
+		{
+			keys[size] = next->keys[i];
+			ptrs[size] = next->ptrs[i];
+			size += 1;
+		}
+		ptrs[size] = next->ptrs[next->size];
+		delete next;
+		retval.newnode = this;
+	}
+	else
+	{
+		retval.merged = false;
+		int pcount = (next->size - size + 1) / 2;
+		keys[size] = key;
+		size += 1;
+		for (int i = 0; i < pcount - 1; i++)
+		{
+			keys[size] = next->keys[i];
+			ptrs[size] = next->ptrs[i];
+			size += 1;
+		}
+		ptrs[size] = next->ptrs[pcount - 1];
+		retval.newkey = next->keys[pcount - 1];
+		for (int i = pcount; i < next->size; i++)
+		{
+			next->keys[i - pcount] = next->keys[i];
+			next->ptrs[i - pcount] = next->ptrs[i];
+		}
+		next->ptrs[next->size - pcount] = next->ptrs[next->size];
+		next->size = next->size - pcount;
+	}
+	return retval;
+}
+
+template<class K, class V, class Lt>
+void btree<K, V, Lt>::inner::erase(int pos, node* newnode)
+{
+	for (int i = pos; i < size; i++)
+	{
+		keys[i] = keys[i + 1];
+		ptrs[i + 1] = ptrs[i + 2];
+	}
+	ptrs[pos] = newnode;
+	size -= 1;
+}
+
+template<class K, class V, class Lt>
+string btree<K, V, Lt>::inner::to_string(int depth)
 {
 	stringstream retval;
 	
@@ -338,7 +433,7 @@ inline string btree<K, V, Lt>::inner::to_string(int depth)
 }
 
 template <class K, class V, class Lt>
-int btree<K, V, Lt>::leaf::get_pos(const K& key)
+inline int btree<K, V, Lt>::leaf::get_pos(const K& key)
 {
 	return upper_bound(this->keys, this->keys + this->size, key, Lt()) - this->keys;
 }
@@ -395,7 +490,58 @@ typename btree<K, V, Lt>::split_info btree<K, V, Lt>::leaf::split()
 }
 
 template<class K, class V, class Lt>
-inline string btree<K, V, Lt>::leaf::to_string(int depth)
+typename btree<K, V, Lt>::redis_info btree<K, V, Lt>::leaf::redis(const K&, node* nextin)
+{
+	leaf* next = (leaf*)nextin;
+	redis_info retval;
+	if (next->is_empty())
+	{
+		retval.merged = true;
+		for (int i = 0; i < next->size; i++)
+		{
+			keys[size] = next->keys[i];
+			values[size] = next->values[i];
+			size += 1;
+		}
+		this->next = next->next;
+		delete next;
+		retval.newnode = this;
+	}
+	else
+	{
+		retval.merged = false;
+		int pcount = (next->size - size + 1) / 2;
+		for (int i = 0; i < pcount; i++)
+		{
+			keys[size] = next->keys[i];
+			values[size] = next->values[i];
+			size += 1;
+		}
+		retval.newkey = next->keys[pcount];
+		for (int i = pcount; i < next->size; i++)
+		{
+			next->keys[i - pcount] = next->keys[i];
+			next->values[i - pcount] = next->values[i];
+		}
+		next->size = next->size - pcount;
+	}
+	return retval;
+}
+
+template<class K, class V, class Lt>
+void btree<K, V, Lt>::leaf::erase(const K& key)
+{
+	int pos = get_pos(key) - 1;
+	for (int i = pos; i < size; i++)
+	{
+		keys[i] = keys[i + 1];
+		values[i] = values[i + 1];
+	}
+	size -= 1;
+}
+
+template<class K, class V, class Lt>
+string btree<K, V, Lt>::leaf::to_string(int depth)
 {
 	stringstream retval;
 	retval << depth << ":[";
@@ -417,3 +563,10 @@ btree<K, V, Lt>::split_info::split_info(K key, node* left, node* right) : key(ke
 
 
 template class btree<int,int,less<int>>;
+
+template<class K, class V, class Lt>
+btree<K, V, Lt>::redis_info::redis_info()
+{
+	this->merged = false;
+	this->newnode = NULL;
+}
