@@ -1,4 +1,9 @@
-CC := g++
+ifndef TRAVIS
+    CC := g++
+endif
+ifdef TRAVIS
+    CC := g++-5
+endif
 EMCC := emcc
 SRCDIR := src
 BUILDDIR := build
@@ -49,6 +54,9 @@ cleanout:
 	@mkdir -p $(REQDIRS)
 
 # Tests
+
+bench: $(TARGET)
+	$(TARGET) bench
 
 test: $(TARGET)
 	$(TARGET) test
