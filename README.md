@@ -1,6 +1,6 @@
 [![Build Status](https://travis-ci.org/hbirler/dbstruct.svg?branch=master)](https://travis-ci.org/hbirler/dbstruct)
 
-## Synopsis
+## DBStruct
 B+Tree implementation in C++11 (it works, but may not be pretty)
 
 ### Using
