@@ -1,11 +1,11 @@
 ![Build Status](https://travis-ci.org/hbirler/dbstruct.svg?branch=master)
 
 ## Synopsis
-B+Tree implementation in C++11
-(it works, but may not be pretty)
+B+Tree implementation in C++11 (it works, but may not be pretty)
 
 ### Using
 The B+Tree implementation is a single header file `btree.h`
+
 Have fun
 
 ### Performance
