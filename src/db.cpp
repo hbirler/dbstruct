@@ -106,6 +106,7 @@ int main_bench()
 int main_test()
 {
 	int testsize = 1000000;
+	int integ = 1;
 
 	std::default_random_engine generator;
 	std::uniform_int_distribution<int> distribution(1, testsize);
@@ -117,7 +118,9 @@ int main_test()
 		mytree.emplace(num, (int64_t)num * num);
 	}
 	
-	assert(mytree.check_integrity());
+	integ = mytree.check_integrity();
+	cout << "Integrity(insert) " << integ << endl;
+	assert(integ);
 
 	for (int i = 1; i < testsize; i++)
 	{
@@ -127,7 +130,9 @@ int main_test()
 			assert(*val == (int64_t)num * num);
 	}
 
-	assert(mytree.check_integrity());
+	integ = mytree.check_integrity();
+	cout << "Integrity(find) " << integ << endl;
+	assert(integ);
 
 	for (int i = 1; i < testsize; i++)
 	{
@@ -135,10 +140,78 @@ int main_test()
 		mytree.erase(num);
 	}
 
-	assert(mytree.check_integrity());
+	integ = mytree.check_integrity();
+	cout << "Integrity(erase) " << integ << endl;
+	assert(integ);
+
+
+
+
+	btree<int, int64_t> t2;
+	for (int i = 0; i < testsize; i++)
+		t2.emplace(i, (int64_t)i*i);
+
+	integ = t2.check_integrity();
+	cout << "Integrity(insert2) " << integ << endl;
+	assert(integ);
+
+	for (int i = 0; i < testsize; i++)
+		assert(*t2.find(i) == (int64_t)i*i);
+
+	for (int i = 0; i < testsize; i++)
+		t2.erase(i);
+
+	integ = t2.check_integrity();
+	cout << "Integrity(erase2) " << integ << endl;
+	assert(integ);
+
+	for (int i = 0; i < testsize; i++)
+		assert(t2.find(i) == NULL);
+
+
+
+	btree<int, int64_t> t3;
+	for (int i = testsize; i >= 0; i--)
+	{
+		if (i == 2)
+			i = 2;
+		t3.emplace(i, (int64_t)i*i);
+	}
+
+	integ = t3.check_integrity();
+	cout << "Integrity(insert3) " << integ << endl;
+	assert(integ);
+
+	for (int i = 0; i < testsize; i++)
+		assert(*t3.find(i) == (int64_t)i*i);
+
+	for (int i = testsize; i >= 0; i--)
+		t3.erase(i);
+
+	integ = t3.check_integrity();
+	cout << "Integrity(erase3) " << integ << endl;
+	assert(integ);
+
+	for (int i = 0; i < testsize; i++)
+		assert(t3.find(i) == NULL);
 
 	
 	return 0;
+}
+
+void easy_test()
+{
+	int size = 100000;
+	int integ = 1;
+	btree<int, int64_t> mt;
+	for (int i = 0; i < size; i++)
+		mt.insert(i, i*i);
+	for (int i = size; i >= 0; i--)
+		mt.erase(i);
+
+	integ = mt.check_integrity();
+	cout << "Integrity(erase) " << integ << endl;
+	assert(integ);
 }
 
 int main(int argc, char* argv[])
@@ -152,7 +225,11 @@ int main(int argc, char* argv[])
 			return main_bench();
 	}
 	
+
+	//benchy();
 	main_test();
+	//easy_test();
+	//main_bench();
 
 	return 0;
 }

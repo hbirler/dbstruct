@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 #include <climits>
+#include <cassert>
 
 using namespace std;
 
@@ -138,6 +139,8 @@ inline V* btree<K,V,Lt>::find(const K& key)
 {
 	if (!root)
 		return NULL;
+	if (root->size == 0)
+		return NULL;
 	
 	node* cur = root;
 	
@@ -232,7 +235,7 @@ void btree<K,V,Lt>::insert(const K& key, const V& value)
 	{
 		root = new leaf();
 		((leaf*)root)->insert(key, value);
-		
+		psize += 1;
 		return;
 	}
 	
@@ -277,11 +280,12 @@ void btree<K,V,Lt>::insert(const K& key, const V& value)
 	int pos = ((leaf*)cur)->get_pos(key) - 1;
 	V* mv = ((leaf*)cur)->get(pos, key);
 	if (mv == NULL)
+	{
 		((leaf*)cur)->insert(pos + 1, key, value);
+		this->psize += 1;
+	}
 	else
 		*mv = value;
-
-	this->psize += 1;
 }
 
 template<class K, class V, class Lt>
@@ -292,6 +296,9 @@ void btree<K, V, Lt>::erase(const K& key)
 		return;*/
 
 	if (!root)
+		return;
+
+	if (root->size == 0)
 		return;
 
 	node* cur = root;
@@ -308,7 +315,6 @@ void btree<K, V, Lt>::erase(const K& key)
 			node* m1, *m2;
 			if (npos == me->size)
 			{
-				//cout << "Alarm" << endl;
 				m1pos = npos - 1;
 				m1 = me->ptrs[m1pos];
 				m2 = me->ptrs[m1pos + 1];
@@ -326,12 +332,16 @@ void btree<K, V, Lt>::erase(const K& key)
 				me->erase(m1pos, rp.newnode);
 				if (cur == root && me->size == 0)
 					root = rp.newnode;
+				cur = rp.newnode;
 			}
 			else
 			{
 				me->keys[m1pos] = rp.newkey;
+				if (Lt()(key, rp.newkey))
+					cur = m1;
+				else
+					cur = m2;
 			}
-			//cur = something
 		}
 		else
 		{
@@ -340,9 +350,10 @@ void btree<K, V, Lt>::erase(const K& key)
 	}
 	int pos = ((leaf*)cur)->get_pos(key) - 1;
 	if (((leaf*)cur)->get(pos, key))
+	{
 		((leaf*)cur)->erase(pos, key);
-
-	this->psize -= 1;
+		this->psize -= 1;
+	}
 }
 
 
@@ -372,12 +383,12 @@ inline int btree<K, V, Lt>::inner::check_integrity(int mmax)
 		return INT_MAX;
 	for (int i = 0; i < size; i++)
 	{
-		mmax = ptrs[i]->check_integrity();
+		mmax = ptrs[i]->check_integrity(mmax);
 		if (mmax > keys[i])
 			return INT_MAX;
 		mmax = keys[i];
 	}
-	mmax = ptrs[size]->check_integrity();
+	mmax = ptrs[size]->check_integrity(mmax);
 	return mmax;
 }
 
@@ -565,6 +576,8 @@ template<class K, class V, class Lt>
 V* btree<K, V, Lt>::leaf::get(int pos, const K& key)
 {
 	if (pos >= size)
+		return NULL;
+	if (pos < 0)
 		return NULL;
 	if (Lt()(this->keys[pos], key) || Lt()(key, this->keys[pos]))
 		return NULL;
