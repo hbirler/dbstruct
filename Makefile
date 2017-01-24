@@ -22,7 +22,7 @@ EMCFLAGS := -std=c++11 -O2
 LIB := # 
 INC := -I include
 
-all: build test
+all: compile test
 
 compile: $(TARGET)
 
