@@ -55,6 +55,9 @@ cleanout:
 
 # Tests
 
+demo: $(TARGET)
+	$(TARGET) demo
+
 bench: $(TARGET)
 	$(TARGET) bench
 

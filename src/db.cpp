@@ -205,13 +205,42 @@ void easy_test()
 	int integ = 1;
 	btree<int, int64_t> mt;
 	for (int i = 0; i < size; i++)
-		mt.insert(i, i*i);
+		mt.emplace(i, i*i);
 	for (int i = size; i >= 0; i--)
 		mt.erase(i);
 
 	integ = mt.check_integrity();
 	cout << "Integrity(erase) " << integ << endl;
 	assert(integ);
+}
+
+int main_demo()
+{
+	const int DEMO_SIZE = 1000010;
+	const int RANGE = 10;
+
+	/*btree<int, int64_t> mt;
+	for (int64_t i = 1; i <= DEMO_SIZE; i++)
+	{
+		mt.emplace(i, i*i);
+	}
+
+	for (int64_t i = RANGE * 2; i <= DEMO_SIZE - RANGE * 2; i++)
+	{
+		mt.erase(i);
+	}
+
+	for (int64_t val : mt.find_range(RANGE, DEMO_SIZE - RANGE))
+		cout << val << " ";
+	cout << endl;*/
+
+	btree<int, int64_t> t2;
+	t2[3] = 5;
+	cout << t2[3] << endl;
+
+	
+
+	return 0;
 }
 
 int main(int argc, char* argv[])
@@ -223,13 +252,17 @@ int main(int argc, char* argv[])
 			return main_test();
 		if (strcmp(argv[1], "bench") == 0)
 			return main_bench();
+		if (strcmp(argv[1], "demo") == 0)
+			return main_demo();
 	}
 	
 
 	//benchy();
-	main_test();
+	main_demo();
 	//easy_test();
 	//main_bench();
+
+	system("pause");
 
 	return 0;
 }
@@ -240,8 +273,8 @@ int main(int argc, char* argv[])
 void benchy()
 {
 	btree<int, int64_t> mytree;
-	mytree.insert(1, 1);
-	mytree.insert(1, 3);
+	mytree.emplace(1, 1);
+	mytree.emplace(1, 3);
 
 	int testmax = 1000000;
 	int testr = 5;
@@ -254,7 +287,7 @@ void benchy()
 		int num = distribution(generator);
 		//int num = i;
 		//cout << num << endl;
-		mytree.insert(num, (int64_t)num*num);
+		mytree.emplace(num, (int64_t)num*num);
 	}
 
 	for (int i = 1; i < testr; i++)

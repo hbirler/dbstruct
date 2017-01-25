@@ -25,7 +25,8 @@ class btree
 	public:
 	btree();
 	void emplace(const K&, const V&);
-	void insert(const K&, const V&);
+	V& get(const K&, const V*);
+	V& operator[](const K&);
 	void erase(const K&);
 	V* find(const K&);
 	bool contains(const K&);
@@ -101,8 +102,8 @@ class btree
 		bool is_leaf() { return true; }
 		inline bool is_full() { return size == LH; }
 		inline bool is_empty() { return size == LL; }
-		void insert(const K&, const V&);
-		void insert(int, const K&, const V&);
+		V& insert(const K&, const V&);
+		V& insert(int, const K&, const V&);
 		int check_integrity(int mmax) override;
 		V* get(const K&);
 		V* get(int, const K&);
@@ -130,7 +131,8 @@ btree<K, V, Lt>::btree()
 template<class K, class V, class Lt>
 inline void btree<K, V, Lt>::emplace(const K& key, const V& value)
 {
-	this->insert(key, value);
+	V& mv = this->get(key, &value);
+	mv = value;
 }
 
 
@@ -222,7 +224,7 @@ string btree<K, V, Lt>::to_string()
 }
 
 template <class K, class V, class Lt>
-void btree<K,V,Lt>::insert(const K& key, const V& value)
+V& btree<K,V,Lt>::get(const K& key, const V* valueref)
 {
 	/*V* found = find(key);
 	if (found)
@@ -234,9 +236,11 @@ void btree<K,V,Lt>::insert(const K& key, const V& value)
 	if (!root)
 	{
 		root = new leaf();
-		((leaf*)root)->insert(key, value);
 		psize += 1;
-		return;
+		if (valueref == NULL)
+			return ((leaf*)root)->insert(key, V());
+		else
+			return ((leaf*)root)->insert(key, *valueref);
 	}
 	
 	node* cur = root;
@@ -281,11 +285,20 @@ void btree<K,V,Lt>::insert(const K& key, const V& value)
 	V* mv = ((leaf*)cur)->get(pos, key);
 	if (mv == NULL)
 	{
-		((leaf*)cur)->insert(pos + 1, key, value);
 		this->psize += 1;
+		if (valueref == NULL)
+			return ((leaf*)cur)->insert(pos + 1, key, V());
+		else
+			return ((leaf*)cur)->insert(pos + 1, key, *valueref);
 	}
 	else
-		*mv = value;
+		return *mv;
+}
+
+template<class K, class V, class Lt>
+inline V& btree<K, V, Lt>::operator[](const K& key)
+{
+	return get(key, NULL);
 }
 
 template<class K, class V, class Lt>
@@ -529,13 +542,13 @@ inline int btree<K, V, Lt>::leaf::get_pos(const K& key)
 }
 
 template <class K, class V, class Lt>
-inline void btree<K, V, Lt>::leaf::insert(const K& key, const V& value)
+inline V& btree<K, V, Lt>::leaf::insert(const K& key, const V& value)
 {
-	insert(this->get_pos(key), key, value);
+	return insert(this->get_pos(key), key, value);
 }
 
 template <class K, class V, class Lt>
-void btree<K, V, Lt>::leaf::insert(int pos, const K& key, const V& value)
+V& btree<K, V, Lt>::leaf::insert(int pos, const K& key, const V& value)
 {
 	for (int i = this->size; i > pos; i--)
 	{
@@ -548,6 +561,7 @@ void btree<K, V, Lt>::leaf::insert(int pos, const K& key, const V& value)
 	this->keys[pos] = key;
 	this->values[pos] = value;
 	this->size += 1;
+	return this->values[pos];
 }
 
 template<class K, class V, class Lt>
